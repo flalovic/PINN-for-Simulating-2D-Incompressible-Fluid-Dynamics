@@ -3,19 +3,18 @@ domain:
   x_max: 1.0
   y_min: 0.0
   y_max: 1.0
-  nx_cells: 100
-  ny_cells: 100
+  nx_cells: 128
+  ny_cells: 128
   mesh_grading: [2, 1, 1]
 
 physics:
-  kinematic_viscosity_nu: 0.1
   boundary_conditions:
-    lid_velocity: [2.0, 0.0, 0.0]
+    lid_velocity: [1.0, 0.0, 0.0]
     bottom_wall: "noSlip"
 
 system:
   time_control:
-    delta_t: 0.0001
+    delta_t: 0.01
     end_time: 0.5
     write_interval: 20
   solver_control:
