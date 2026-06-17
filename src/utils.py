@@ -17,112 +17,84 @@ def compute_physics_residual_metrics(
     mean,
     std,
     device,
+    batch_size=5000
 ):
     """
     Računa metrike za PDE rezidualne članove koristeći isti skalirajuci prostor
-    kao i trening.
-
-    Vraća:
-        dict sa srednjim apsolutnim greškama i RMS vrednostima za:
-        - continuity
-        - momentum_x
-        - momentum_y
+    kao i trening, obrađujući podatke u batchevima kako bi se izbegao CUDA OOM.
     """
     model.eval()
 
     input_values = df[input_col_names].to_numpy(dtype=np.float32)
     input_mean = mean[input_col_names].to_numpy(dtype=np.float32)
     input_std = std[input_col_names].to_numpy(dtype=np.float32)
-    input_norm = (input_values - input_mean) / input_std
+    
+    num_samples = len(df)
+    
+    metrics = {
+        "continuity": {"sum_abs": 0.0, "sum_sq": 0.0, "max_abs": 0.0},
+        "momentum_x": {"sum_abs": 0.0, "sum_sq": 0.0, "max_abs": 0.0},
+        "momentum_y": {"sum_abs": 0.0, "sum_sq": 0.0, "max_abs": 0.0},
+    }
 
-    x = torch.tensor(input_norm, dtype=torch.float32, device=device, requires_grad=True)
+    for i in range(0, num_samples, batch_size):
+        batch_vals = input_values[i : i + batch_size]
+        batch_norm = (batch_vals - input_mean) / input_std
+        
+        x = torch.tensor(batch_norm, dtype=torch.float32, device=device, requires_grad=True)
+        
+        re_unscaled = torch.tensor(batch_vals[:, 1], dtype=torch.float32, device=device)
+        re_unscaled = torch.clamp(torch.abs(re_unscaled) + 1e-8, min=1e-8)
 
-    with torch.enable_grad():
-        pred = model(x)
+        with torch.enable_grad():
+            pred = model(x)
 
-        u = pred[:, 0]
-        v = pred[:, 1]
-        p = pred[:, 2]
+            u = pred[:, 0]
+            v = pred[:, 1]
+            p = pred[:, 2]
 
-        u_grad = torch.autograd.grad(
-            outputs=u,
-            inputs=x,
-            grad_outputs=torch.ones_like(u),
-            create_graph=True,
-            retain_graph=True,
-        )[0]
-        v_grad = torch.autograd.grad(
-            outputs=v,
-            inputs=x,
-            grad_outputs=torch.ones_like(v),
-            create_graph=True,
-            retain_graph=True,
-        )[0]
-        p_grad = torch.autograd.grad(
-            outputs=p,
-            inputs=x,
-            grad_outputs=torch.ones_like(p),
-            create_graph=True,
-            retain_graph=True,
-        )[0]
+            u_grad = torch.autograd.grad(u, x, torch.ones_like(u), create_graph=True)[0]
+            v_grad = torch.autograd.grad(v, x, torch.ones_like(v), create_graph=True)[0]
+            p_grad = torch.autograd.grad(p, x, torch.ones_like(p), create_graph=True)[0]
 
-        u_x = u_grad[:, 2]
-        u_y = u_grad[:, 3]
-        v_x = v_grad[:, 2]
-        v_y = v_grad[:, 3]
-        p_x = p_grad[:, 2]
-        p_y = p_grad[:, 3]
+            u_x, u_y = u_grad[:, 2], u_grad[:, 3]
+            v_x, v_y = v_grad[:, 2], v_grad[:, 3]
+            p_x, p_y = p_grad[:, 2], p_grad[:, 3]
 
-        u_xx = torch.autograd.grad(
-            outputs=u_x,
-            inputs=x,
-            grad_outputs=torch.ones_like(u_x),
-            create_graph=True,
-            retain_graph=True,
-        )[0][:, 2]
-        u_yy = torch.autograd.grad(
-            outputs=u_y,
-            inputs=x,
-            grad_outputs=torch.ones_like(u_y),
-            create_graph=True,
-            retain_graph=True,
-        )[0][:, 3]
-        v_xx = torch.autograd.grad(
-            outputs=v_x,
-            inputs=x,
-            grad_outputs=torch.ones_like(v_x),
-            create_graph=True,
-            retain_graph=True,
-        )[0][:, 2]
-        v_yy = torch.autograd.grad(
-            outputs=v_y,
-            inputs=x,
-            grad_outputs=torch.ones_like(v_y),
-            create_graph=True,
-            retain_graph=True,
-        )[0][:, 3]
+            u_xx = torch.autograd.grad(u_x, x, torch.ones_like(u_x))[0][:, 2]
+            u_yy = torch.autograd.grad(u_y, x, torch.ones_like(u_y))[0][:, 3]
+            v_xx = torch.autograd.grad(v_x, x, torch.ones_like(v_x))[0][:, 2]
+            v_yy = torch.autograd.grad(v_y, x, torch.ones_like(v_y))[0][:, 3]
 
-        re = torch.clamp(torch.abs(x[:, 1]) + 1e-8, min=1e-8)
+            continuity = u_x + v_y
+            momentum_x = u * u_x + v * u_y + p_x - (1.0 / re_unscaled) * (u_xx + u_yy)
+            momentum_y = u * v_x + v * v_y + p_y - (1.0 / re_unscaled) * (v_xx + v_yy)
 
-        continuity = u_x + v_y
-        momentum_x = u * u_x + v * u_y + p_x - (1.0 / re) * (u_xx + u_yy)
-        momentum_y = u * v_x + v * v_y + p_y - (1.0 / re) * (v_xx + v_yy)
+        def update_metrics(name, tensor):
+            arr = tensor.detach().cpu().numpy()
+            metrics[name]["sum_abs"] += float(np.sum(np.abs(arr)))
+            metrics[name]["sum_sq"] += float(np.sum(arr ** 2))
+            metrics[name]["max_abs"] = max(metrics[name]["max_abs"], float(np.max(np.abs(arr))))
 
-    def _stats(tensor):
-        tensor = tensor.detach().cpu().numpy()
+        update_metrics("continuity", continuity)
+        update_metrics("momentum_x", momentum_x)
+        update_metrics("momentum_y", momentum_y)
+
+    def finalize(name):
+        mean_abs = metrics[name]["sum_abs"] / num_samples
+        mean_sq = metrics[name]["sum_sq"] / num_samples
         return {
-            "mean_abs": float(np.mean(np.abs(tensor))),
-            "mean_sq": float(np.mean(tensor ** 2)),
-            "rmse": float(np.sqrt(np.mean(tensor ** 2))),
-            "max_abs": float(np.max(np.abs(tensor))),
+            "mean_abs": float(mean_abs),
+            "mean_sq": float(mean_sq),
+            "rmse": float(np.sqrt(mean_sq)),
+            "max_abs": float(metrics[name]["max_abs"]),
         }
 
     return {
-        "continuity": _stats(continuity),
-        "momentum_x": _stats(momentum_x),
-        "momentum_y": _stats(momentum_y),
+        "continuity": finalize("continuity"),
+        "momentum_x": finalize("momentum_x"),
+        "momentum_y": finalize("momentum_y"),
     }
-
 
 def compute_metrics(y_true, y_pred):
     """
