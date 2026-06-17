@@ -4,3 +4,4 @@
 /data/
 /models/
 *.gif
+/src/__pycache__/
