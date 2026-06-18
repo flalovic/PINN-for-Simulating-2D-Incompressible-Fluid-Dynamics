@@ -2,16 +2,18 @@ import torch
 import torch.nn as nn
 
 class NavierStokesLoss(torch.nn.Module):
-    def __init__(self, c_physics):
+    def __init__(self, c_physics, mean, std):
         super().__init__()
         self.c_physics = c_physics
+        self.mean = mean
+        self.std = std
 
     def forward(self, input, pred, target):
-        re = input[:, 1]
+        re = input[:, 1] * self.std['re'] + self.mean['re']
 
-        u = pred[:, 0]
-        v = pred[:, 1]
-        p = pred[:, 2]
+        u = pred[:, 0] * self.std['U_x']
+        v = pred[:, 1] * self.std['U_y']
+        p = pred[:, 2] * self.std['p']
 
         u_x, u_y, u_xx, u_yy, v_x, v_y, v_xx, v_yy, p_x, p_y = self.calc_grads(input, u, v, p)
 
@@ -49,41 +51,41 @@ class NavierStokesLoss(torch.nn.Module):
             create_graph=True
         )[0]
 
-        u_x = u_grad[:, 2]
-        u_y = u_grad[:, 3]
+        u_x = u_grad[:, 2] / self.std['x']
+        u_y = u_grad[:, 3] / self.std['y']
 
-        v_x = v_grad[:, 2]
-        v_y = v_grad[:, 3]
+        v_x = v_grad[:, 2] / self.std['x']
+        v_y = v_grad[:, 3] / self.std['y']
 
-        p_x = p_grad[:, 2]
-        p_y = p_grad[:, 3]
+        p_x = p_grad[:, 2] / self.std['x']
+        p_y = p_grad[:, 3] / self.std['y']
 
         u_xx = torch.autograd.grad(
             u_x,
             input,
             grad_outputs=torch.ones_like(u_x),
             create_graph=True
-        )[0][:, 2]
+        )[0][:, 2] / self.std['x']
 
         u_yy = torch.autograd.grad(
             u_y,
             input,
             grad_outputs=torch.ones_like(u_y),
             create_graph=True
-        )[0][:, 3]
+        )[0][:, 3] / self.std['y']
 
         v_xx = torch.autograd.grad(
             v_x,
             input,
             grad_outputs=torch.ones_like(v_x),
             create_graph=True
-        )[0][:, 2]
+        )[0][:, 2] / self.std['x']
 
         v_yy = torch.autograd.grad(
             v_y,
             input,
             grad_outputs=torch.ones_like(v_y),
             create_graph=True
-        )[0][:, 3]
+        )[0][:, 3] / self.std['y']
 
         return u_x, u_y, u_xx, u_yy, v_x, v_y, v_xx, v_yy, p_x, p_y
