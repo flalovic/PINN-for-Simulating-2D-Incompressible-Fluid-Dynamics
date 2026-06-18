@@ -1,13 +1,22 @@
 import os
 import torch
 import tempfile
-import pprint
 
 import numpy as np
 import pandas as pd
 
 from PIL import Image
 from matplotlib import pyplot as plt
+
+# ovdje se nalaze funkcije za vizuelizaciju i animaciju:
+# animate_error()
+# animate_flow()
+# plot_velocity_and_pressure()
+# plot_evolution_in_time()
+# plot_compare_predictions()
+# evaluate()
+
+
 
 # Animacija greske kroz vrijeme
 def animate_error(model, df_orig, re_value, mean, std, device, fps=2, output_file=None):
@@ -156,7 +165,7 @@ def animate_error(model, df_orig, re_value, mean, std, device, fps=2, output_fil
         else:
             print(f"✓ Slike generisane - {len(all_errors)} frame-ova")
 
-# Animacija toka kroz vrijeme - generiši slike pa složi u GIF
+# Animacija toka kroz vrijeme - generise slike i slaze u GIF
 def animate_flow(df, re_value, output_file="flow_animation.gif", fps=3):
     """
     Kreira animaciju brzinskog polja i pritiska kroz vrijeme:
@@ -269,7 +278,7 @@ def animate_flow(df, re_value, output_file="flow_animation.gif", fps=3):
     return output_file
 
 
-# Vizuelizacija za određeni vremenski trenutak i Reynolds broj
+# Vizuelizacija za odredjeni vremenski trenutak i Reynolds-ov broj
 def plot_velocity_and_pressure(df, time_step, re_value, title_prefix=""):
     """Vizuelizuje brzinsko polje i pritisak"""
     data = df[(df['time'] == time_step) & (df['re'] == re_value)].copy()
@@ -438,25 +447,16 @@ def compare_predictions(model, df, time_step, re_value, mean, std, device):
     plt.tight_layout()
     plt.show()
 
-# Analiza greške na test setu
-def evaluate_on_test_set(model, test_df_orig, mean, std, device, num_samples=5):
-    """Proceni grešku modela na test setu"""
-    test_errors = []
+# evaluacija na proslijedjenom skupu
+def evaluate(model, test_df_orig, mean, std, device, output_dir="eval_animations", fps=2):
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
     
-    # Uzmi slučajne uzorke za vizuelizaciju
     re_values = sorted(test_df_orig['re'].unique())
-    time_steps = sorted(test_df_orig['time'].unique())
     
-    selected_re = np.random.choice(re_values, min(num_samples, len(re_values)), replace=False)
-    
-    for re_val in selected_re:
-        data_orig = test_df_orig[test_df_orig['re'] == re_val]
-        times_for_re = sorted(data_orig['time'].unique())
-        
-        if len(times_for_re) > 0:
-            t = times_for_re[0]  # Prvi vremenski korak
-            
-            try:
-                compare_predictions(model, test_df_orig, t, re_val, mean, std, device)
-            except Exception as e:
-                print(f"Greška pri vizuelizaciji Re={re_val}: {e}")
+    for re_val in re_values:
+        output_file_path = os.path.join(output_dir, f"error_animation_Re_{int(re_val)}.gif")
+        try:
+            animate_error(model, test_df_orig, re_val, mean, std, device, fps, output_file_path)
+        except Exception as e:
+            print(f"Greška za Re={re_val}: {e}")
