@@ -28,23 +28,15 @@ def parse_args() -> dict[str]:
 
     parser.add_argument("-tr", "--train-config", required=True, help="Konfiguracioni fajl za trening skup")
     parser.add_argument("-te", "--test-config", required=True, help="Konfiguracioni fajl za test skup")
+    parser.add_argument("-re", "--reynolds-config", required=True, help="Konfiguracioni fajl za opseg Rejnoldsovih brojeva")
 
     parser.add_argument("-o", "--output", required=True, help="Naziv izlaznih fajlova")
-
-    parser.add_argument("-re", "--re-range", nargs=2, type=float, metavar=("RE_MIN", "RE_MAX"), required=True, help="Opseg Reynoldsovog broja")
-    parser.add_argument("--n-re", type=int, required=True, help="Broj Reynoldsovih brojeva za uzorkovanje")
-    parser.add_argument("--valid-split", type=float, default=0.1, help="Udio validacionog skupa")
-    parser.add_argument("--test-split", type=float, default=0.2, help="Udio test skupa")
 
     args = parser.parse_args()
     return {'train_config' : args.train_config, 
             'test_config' : args.test_config,
-            'output' : args.output,
-
-            're_range' : (float(args.re_range[0]), float(args.re_range[1])),
-            'n_re_samples' : args.n_re,
-            'valid_ratio' : args.valid_split,
-            'test_ratio' : args.test_split
+            're_config' : args.reynolds_config,
+            'output' : args.output
     }
 
 def fill_template(template_path, output_path, **kwargs):
@@ -170,14 +162,19 @@ def generate(config_file : str, re : float) -> pd.DataFrame:
         dfs.append(df)
 
     # 5. Vraćamo generisani DataFrame za zadato re
-    print(f"[5/5] Funkcija generate(re = {re}) je uspješno izvršena.")
+    print(f"[5/5] Funkcija generate(re = {re}) je uspješno izvršena.\n\n")
+
     return pd.concat(dfs, ignore_index=True).sort_values(by='time')
 
 def generate_train_valid_test(args : dict):
-    re_min, re_max = args['re_range']
-    n_re_samples = args['n_re_samples']
-    valid_split_index = int(n_re_samples * args['valid_ratio'])
-    test_split_index = valid_split_index + int(n_re_samples * args['test_ratio'])
+    with open(config_dir/args['re_config']) as f:
+        config = yaml.safe_load(f)
+
+    re_min, re_max = config['range']['min'], config['range']['max']
+    n_re_samples = config['range']['n_samples']
+    
+    valid_split_index = int(n_re_samples * config['split']['valid'])
+    test_split_index = valid_split_index + int(n_re_samples * config['split']['test'])
 
     re_values = np.linspace(re_min, re_max, n_re_samples)
     np.random.shuffle(re_values)
@@ -211,5 +208,5 @@ if __name__ == "__main__":
     args = parse_args()
     generate_train_valid_test(args)
 
-# python generate_dataset.py -tr train.yaml -te test.yaml -o data -re 100 1000 --n-re 50 --valid-split 0.2 --test-split 0.2
+# python generate_dataset.py -tr train.yaml -te test.yaml -re reynolds.yaml -o data
 

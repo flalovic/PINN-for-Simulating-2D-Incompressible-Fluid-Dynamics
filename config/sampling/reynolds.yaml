@@ -1,0 +1,8 @@
+range:
+  min: 100
+  max: 1000
+  n_samples: 6
+
+split:
+  valid: 0.2
+  test: 0.2
