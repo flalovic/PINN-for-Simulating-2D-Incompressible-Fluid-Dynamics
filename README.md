@@ -1,0 +1,1 @@
+<img src="https://usagif.com/wp-content/uploads/gifs/water-43.gif" width="100%" alt="Water animation">
