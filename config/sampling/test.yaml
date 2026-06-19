@@ -16,7 +16,7 @@ system:
   time_control:
     delta_t: 0.001
     end_time: 10.0
-    write_interval: 250
+    write_interval: 125
   solver_control:
     momentum_relaxation: 0.7
     pressure_relaxation: 0.3
