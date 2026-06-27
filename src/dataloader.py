@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 from pathlib import Path
-from utils import check_regions
+from src.utils import check_regions
 
 def sample_by_region(df: pd.DataFrame, regions: list[dict[str, float]]) -> pd.DataFrame:
     """
@@ -102,9 +102,9 @@ def gen_dataloaders(train_df, valid_df, test_df, input_col_names, target_col_nam
     test_dataset = TensorDataset(torch.tensor(test_df[input_col_names].to_numpy(), dtype=torch.float32), 
                 torch.tensor(test_df[target_col_names].to_numpy(), dtype=torch.float32))
     
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    valid_dataloader = DataLoader(valid_dataset, batch_size=batch_size)
-    test_dataloader = DataLoader(test_dataset, batch_size=batch_size)
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, num_workers=4, shuffle=True)
+    valid_dataloader = DataLoader(valid_dataset, batch_size=batch_size, num_workers=4)
+    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, num_workers=4)
 
     return train_dataloader, valid_dataloader, test_dataloader
 
@@ -121,28 +121,28 @@ if __name__ == '__main__':
         {   # Bottom wall — no-slip
             'x_min': 0.0, 'x_max': 1,
             'y_min': 0.0, 'y_max': e,
-            'dropout': 0.1,
+            'dropout': 0.5,
             'random_state': 42,
             'groupby_cols': ['re', 'time']
         },
         {   # Left wall — no-slip, excludes corners already covered above/below
             'x_min': 0.0, 'x_max': e,
             'y_min': e,   'y_max': 1 - e,
-            'dropout': 0.1,
+            'dropout': 0.5,
             'random_state': 42,
             'groupby_cols': ['re', 'time']
         },
         {   # Right wall — no-slip
             'x_min': 1 - e, 'x_max': 1,
             'y_min': e,        'y_max': 1 - e,
-            'dropout': 0.1,
+            'dropout': 0.5,
             'random_state': 42,
             'groupby_cols': ['re', 'time']
         },
         {   # Interior — vortex core, high redundancy
             'x_min': e,       'x_max': 1 - e,
             'y_min': e,       'y_max': 1 - e,
-            'dropout': 0.7,
+            'dropout': 0.85,
             'random_state': 42,
             'groupby_cols': ['re', 'time']
         },
@@ -151,8 +151,8 @@ if __name__ == '__main__':
     os.chdir('/mnt2/ml_projekat/PINN-for-Simulating-2D-Incompressible-Fluid-Dynamics')  # Change working directory to the script's directory
     print('Working dir changed to:', os.getcwd())
     datapath = Path('data')
-    files = ['data_train.csv', 'data_valid.csv']
-    n_files = ['ndata_train.csv', 'ndata_valid.csv']
+    files = ['data_train.csv', 'data_valid.csv', 'data_test.csv']
+    n_files = ['ndata_train.csv', 'ndata_valid.csv', 'ndata_test.csv']
 
     for (file, n_file) in zip(files, n_files):
         print(f"Sampling {file} by regions and saving to {n_file}...")

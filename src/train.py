@@ -3,11 +3,37 @@ import torch.nn as nn
 
 from tqdm import tqdm
 
+from pathlib import Path
+from datetime import datetime
 
-def train_model(model, train_dataloader, valid_dataloader, criterion, optimizer, device, EPOCHS, physics_loss: bool = True):
+
+def train_model(
+    model,
+    train_dataloader,
+    valid_dataloader,
+    criterion,
+    optimizer,
+    device,
+    epochs,
+    run_dir,
+    checkpoint=None,
+    physics_loss=True,
+):
     train_losses = []
     valid_losses = []
-    for epoch in range(EPOCHS):
+
+    start_epoch = 0
+
+    if checkpoint is not None:
+        model.load_state_dict(checkpoint["model_state_dict"])
+
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        start_epoch = checkpoint["epoch"] + 1
+
+        train_losses = checkpoint["train_losses"].copy()
+        valid_losses = checkpoint["valid_losses"].copy()
+
+    for epoch in range(start_epoch, epochs):
         model.train()
 
         train_loss = 0.0
@@ -53,4 +79,16 @@ def train_model(model, train_dataloader, valid_dataloader, criterion, optimizer,
         train_losses.append(train_loss)
         valid_losses.append(valid_loss)
         print(f"Epoch {epoch}: train loss: {train_loss}, valid loss: {valid_loss}")
+
+        torch.save(
+            {
+                "epoch": epoch,
+                "model_state_dict": model.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+                "train_losses": train_losses,
+                "valid_losses": valid_losses,
+            },
+            run_dir / "checkpoints" / f"checkpoint_epoch_{epoch + 1}.pth",
+        )
+        
     return train_losses, valid_losses
