@@ -3,6 +3,19 @@ import pandas as pd
 import torch
 
 
+def regions_overlap(r1: dict, r2: dict) -> bool:
+    x_overlap = r1['x_min'] < r2['x_max'] and r2['x_min'] < r1['x_max']
+    y_overlap = r1['y_min'] < r2['y_max'] and r2['y_min'] < r1['y_max']
+    return x_overlap and y_overlap
+
+def check_regions(regions: list[dict]) -> bool:
+    for i in range(len(regions)):
+        for j in range(i + 1, len(regions)):
+            if regions_overlap(regions[i], regions[j]):
+                return False
+    return True
+
+
 def normalize_data(df: pd.DataFrame, mean, std) -> pd.DataFrame:
     """
     Normalizujemo podatke u DF-u koristeci Z-score normalizaciju.

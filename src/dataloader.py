@@ -6,6 +6,40 @@ import pandas as pd
 
 from pathlib import Path
 
+from utils import check_regions
+
+def sample_by_region(df: pd.DataFrame, regions: list[dict[str, float]]) -> pd.DataFrame:
+    """
+    Funkcija koja po regionima uzorkuje tacke! Regioni moraju biti disjunktni!    
+    Primjer region mape:
+        lijevi_kvadrat = {
+            'x_min': 0.0,
+            'x_max': 0.5,
+            'y_min': 0.0,
+            'y_max': 0.5,
+            'dropout': 0.5,  # 50% tacaka ce biti
+            'random_state': 42,  # za reproducibilnost
+            'groupby_cols': ['re', 'time']  # opcionalno, default je ['re']
+        }
+    """
+    assert check_regions(regions) is True, "Regions must be disjoint!"
+    sampled_df = pd.DataFrame(columns=df.columns)
+    for region in regions:
+        x_min, x_max = region['x_min'], region['x_max']
+        y_min, y_max = region['y_min'], region['y_max']
+        dropout = region['dropout']
+        random_state = region['random_state']
+        groupby_cols = region.get('groupby_cols', ['re'])
+        
+        bounded_df = df[(df['x'] >= x_min) & (df['x'] <= x_max) & (df['y'] >= y_min) & (df['y'] <= y_max)]
+        
+        grouped_df = bounded_df.groupby(groupby_cols, group_keys=False)
+
+        new_sampled_df = grouped_df.apply(lambda x: x.sample(frac=1-dropout, random_state=random_state))
+        sampled_df = pd.concat([sampled_df, new_sampled_df])
+
+    return sampled_df
+
 
 def load_data(file_path: Path, file_prefix: str):
     """
