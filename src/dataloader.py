@@ -6,7 +6,7 @@ import pandas as pd
 
 from pathlib import Path
 
-from utils import check_regions
+from src.utils import check_regions
 
 def sample_by_region(df: pd.DataFrame, regions: list[dict[str, float]]) -> pd.DataFrame:
     """
@@ -102,8 +102,8 @@ def gen_dataloaders(train_df, valid_df, test_df, input_col_names, target_col_nam
     test_dataset = TensorDataset(torch.tensor(test_df[input_col_names].to_numpy(), dtype=torch.float32), 
                 torch.tensor(test_df[target_col_names].to_numpy(), dtype=torch.float32))
     
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    valid_dataloader = DataLoader(valid_dataset, batch_size=batch_size)
-    test_dataloader = DataLoader(test_dataset, batch_size=batch_size)
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, num_workers=4, shuffle=True)
+    valid_dataloader = DataLoader(valid_dataset, batch_size=batch_size, num_workers=4)
+    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, num_workers=4)
 
     return train_dataloader, valid_dataloader, test_dataloader

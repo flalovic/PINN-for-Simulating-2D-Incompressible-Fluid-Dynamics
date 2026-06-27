@@ -1,5 +1,7 @@
 import numpy as np
 import pandas as pd
+from pathlib import Path
+from datetime import datetime
 import torch
 
 
@@ -129,3 +131,11 @@ def evaluate_model(
 
     return metrics
 
+def create_run_directory():
+    run_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+    run_dir = Path("runs") / run_name
+    (run_dir / "checkpoints").mkdir(parents=True, exist_ok=True)
+
+    return run_dir
+    

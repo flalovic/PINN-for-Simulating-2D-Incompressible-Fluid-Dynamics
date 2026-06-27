@@ -2,6 +2,7 @@
 /openfoam_setup/cavity/[1-9]*
 /pinn_env/
 /models/
+/runs/
 /data/
 *.gif
 /src/__pycache__/
