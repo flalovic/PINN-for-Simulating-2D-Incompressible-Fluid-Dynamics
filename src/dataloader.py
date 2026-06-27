@@ -21,6 +21,46 @@ def sample_by_region(df: pd.DataFrame, regions: list[dict[str, float]]) -> pd.Da
             'random_state': 42,  # za reproducibilnost
             'groupby_cols': ['re', 'time']  # opcionalno, default je ['re']
         }
+
+    Primjer liste regiona:
+        e = 0.003125  # 2 cell layers
+        regions = [
+            {   # Lid — only non-zero BC, most important
+                'x_min': 0.0,     'x_max': 0.1,
+                'y_min': 0.1 - e, 'y_max': 0.1,
+                'dropout': 0.0,
+                'random_state': 42,
+                'groupby_cols': ['re']
+            },
+            {   # Bottom wall — no-slip
+                'x_min': 0.0, 'x_max': 0.1,
+                'y_min': 0.0, 'y_max': e,
+                'dropout': 0.1,
+                'random_state': 42,
+                'groupby_cols': ['re']
+            },
+            {   # Left wall — no-slip, excludes corners already covered above/below
+                'x_min': 0.0, 'x_max': e,
+                'y_min': e,   'y_max': 0.1 - e,
+                'dropout': 0.1,
+                'random_state': 42,
+                'groupby_cols': ['re']
+            },
+            {   # Right wall — no-slip
+                'x_min': 0.1 - e, 'x_max': 0.1,
+                'y_min': e,        'y_max': 0.1 - e,
+                'dropout': 0.1,
+                'random_state': 42,
+                'groupby_cols': ['re']
+            },
+            {   # Interior — vortex core, high redundancy
+                'x_min': e,       'x_max': 0.1 - e,
+                'y_min': e,       'y_max': 0.1 - e,
+                'dropout': 0.7,
+                'random_state': 42,
+                'groupby_cols': ['re']
+            },
+        ]
     """
     assert check_regions(regions) is True, "Regions must be disjoint!"
     sampled_df = pd.DataFrame(columns=df.columns)
