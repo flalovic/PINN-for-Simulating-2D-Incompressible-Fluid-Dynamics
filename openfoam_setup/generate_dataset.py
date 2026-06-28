@@ -220,5 +220,16 @@ if __name__ == "__main__":
     args = parse_args()
     generate_train_valid_test(args)
 
+
 # python generate_dataset.py -tr train.yaml -te test.yaml -re reynolds.yaml -o full_data
+
+# if __name__ == "__main__":
+#     df = generate("animation.yaml", 1100)
+
+#     df.sort_values(
+#         by=["time", "y", "x"],
+#         kind="stable"
+#     ).to_csv(output_dir / "re1100.csv", index=False)
+
+
 

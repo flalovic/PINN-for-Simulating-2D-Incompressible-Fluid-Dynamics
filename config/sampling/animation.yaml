@@ -1,0 +1,23 @@
+domain:
+  x_min: 0.0
+  x_max: 1.0
+  y_min: 0.0
+  y_max: 1.0
+  nx_cells: 128
+  ny_cells: 128
+  mesh_grading: [1, 1, 1]
+
+physics:
+  boundary_conditions:
+    lid_velocity: [1.0, 0.0, 0.0]
+    bottom_wall: "noSlip"
+
+system:
+  time_control:
+    delta_t: 0.005
+    end_time: 10.0
+    write_interval: 7
+
+  solver_control:
+    momentum_relaxation: 0.7
+    pressure_relaxation: 0.3

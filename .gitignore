@@ -4,5 +4,4 @@
 /models/
 /runs/
 /data/
-*.gif
 /src/__pycache__/
