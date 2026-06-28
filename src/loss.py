@@ -8,6 +8,8 @@ class NavierStokesLoss(torch.nn.Module):
         self.mean = mean
         self.std = std
 
+        self.mse = nn.MSELoss()
+
     def forward(self, input, pred, target):
         re = input[:, 1] * self.std['re'] + self.mean['re']
 
@@ -18,16 +20,18 @@ class NavierStokesLoss(torch.nn.Module):
         u_x, u_y, u_xx, u_yy, v_x, v_y, v_xx, v_yy, p_x, p_y = self.calc_grads(input, u, v, p)
 
         # data loss
-        loss = nn.MSELoss()(pred, target)
+        data_loss = self.mse(pred, target)
 
         # physics loss
         f_c = u_x + v_y
         f_u = u * u_x + v * u_y + p_x - 1 / re * (u_xx + u_yy)
         f_v = u * v_x + v * v_y + p_y - 1 / re * (v_xx + v_yy)
 
-        loss += self.c_physics * (torch.mean(f_c ** 2) + torch.mean(f_u ** 2) + torch.mean(f_v ** 2))
+        physics_loss = torch.mean(f_c ** 2) + torch.mean(f_u ** 2) + torch.mean(f_v ** 2)
 
-        return loss
+        loss = data_loss + self.c_physics * physics_loss
+
+        return loss, data_loss, physics_loss
 
     def calc_grads(self, input, u, v, p):
         u_grad = torch.autograd.grad(

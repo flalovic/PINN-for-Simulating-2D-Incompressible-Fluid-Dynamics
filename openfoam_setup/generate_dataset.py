@@ -124,12 +124,13 @@ def generate(config_file : str, re : float) -> pd.DataFrame:
 
     print("[4/5] Ekstrahujem 2D CSV podatke na z=0.05 pomoću PyVista...")
     
-    steps = ['0']
+    steps = []
+
     for fold in foam_dir.iterdir():
-        if fold.is_dir() and '.' in fold.name: 
-            print(f" - Detektovan korak: {fold.name}")
+        if fold.is_dir() and fold.name.replace('.', '', 1).isdigit():
             steps.append(fold.name)
 
+    steps.sort(key=float)
 
     # 1. Kreiramo dummy fajl koji PyVista zahteva
     foam_file = foam_dir / "case.foam"
@@ -198,15 +199,26 @@ def generate_train_valid_test(args : dict):
             )
 
     pd.concat(train_dfs, ignore_index=True).\
-        sort_values(by='re', kind='stable').to_csv(output_dir / f"{args['output']}_train.csv", index=False)
+        sort_values(
+            by=['re', 'time', 'y', 'x'], 
+            kind='stable'
+        ).to_csv(output_dir / f"{args['output']}_train.csv", index=False)
+    
     pd.concat(valid_dfs, ignore_index=True).\
-        sort_values(by='re', kind='stable').to_csv(output_dir / f"{args['output']}_valid.csv", index=False)
+        sort_values(
+            by=['re', 'time', 'y', 'x'], 
+            kind='stable'
+        ).to_csv(output_dir / f"{args['output']}_valid.csv", index=False)
+    
     pd.concat(test_dfs, ignore_index=True).\
-        sort_values(by='re', kind='stable').to_csv(output_dir / f"{args['output']}_test.csv", index=False)
+        sort_values(
+            by=['re', 'time', 'y', 'x'], 
+            kind='stable'
+        ).to_csv(output_dir / f"{args['output']}_test.csv", index=False)
 
 if __name__ == "__main__":
     args = parse_args()
     generate_train_valid_test(args)
 
-# python generate_dataset.py -tr train.yaml -te test.yaml -re reynolds.yaml -o data
+# python generate_dataset.py -tr train.yaml -te test.yaml -re reynolds.yaml -o full_data
 
