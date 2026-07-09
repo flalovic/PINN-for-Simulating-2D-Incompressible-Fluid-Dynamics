@@ -1,26 +1,21 @@
 import yaml
 import argparse
 import subprocess
+import warnings
 
 import pandas as pd
 import numpy as np
 import pyvista as pv
 
 from pathlib import Path
+from sklearn.model_selection import train_test_split
 
 np.random.seed(42)
 
-# Direktorij za pohranu podataka
 output_dir = Path("../data")
-
-# Direktorij do config fajlova za simulacije
 config_dir = Path("../config/sampling")
-
 template_dir = Path("../openfoam_setup/templates")
-
-#Direktorij do OpenFOAM podataka
 foam_dir = Path("../openfoam_setup/cavity")
-
 
 
 def parse_args() -> dict[str]:
@@ -47,7 +42,6 @@ def fill_template(template_path, output_path, **kwargs):
     for key, value in kwargs.items():
         filled_content = filled_content.replace(f"{{{key}}}", str(value))
 
-
     with open(output_path, 'w') as f:
         f.write(filled_content)
 
@@ -65,7 +59,6 @@ def generate(config_file : str, re : float) -> pd.DataFrame:
     print(f"Mesh rezolucija: {dom['nx_cells']} x {dom['ny_cells']}")
     
     # 3. Ubacivanje YAML vrednosti u OpenFOAM fajlove
-    # - Brzina
     fill_template(
         template_dir / "U.template", 
         foam_dir / "0/U", 
@@ -74,10 +67,8 @@ def generate(config_file : str, re : float) -> pd.DataFrame:
         U_Z=phys['boundary_conditions']['lid_velocity'][2]
     )
 
-    # - Viskoznost
     U = phys['boundary_conditions']['lid_velocity'][0]
     L = dom['x_max'] - dom['x_min']
-
     nu = U * L / re
 
     fill_template(
@@ -86,7 +77,6 @@ def generate(config_file : str, re : float) -> pd.DataFrame:
         NU_VALUE=nu
     )
 
-    # - Mreža (Mesh)
     fill_template(
         template_dir / "blockMeshDict.template", 
         foam_dir / "system/blockMeshDict", 
@@ -97,7 +87,6 @@ def generate(config_file : str, re : float) -> pd.DataFrame:
         G_Z = dom['mesh_grading'][2]
     )
 
-    # - controlDict
     fill_template(
         template_dir / "controlDict.template", 
         foam_dir / "system/controlDict", 
@@ -105,7 +94,6 @@ def generate(config_file : str, re : float) -> pd.DataFrame:
         DELTA_T=sys['time_control']['delta_t'],
         WRITE_INT = sys['time_control']['write_interval']
     )
-
 
     print("\n[1/5] Brišem stare rezultate...")
     subprocess.run(["foamCleanTutorials"], cwd=foam_dir, capture_output=True)
@@ -125,46 +113,41 @@ def generate(config_file : str, re : float) -> pd.DataFrame:
     print("[4/5] Ekstrahujem 2D CSV podatke na z=0.05 pomoću PyVista...")
     
     steps = []
-
     for fold in foam_dir.iterdir():
         if fold.is_dir() and fold.name.replace('.', '', 1).isdigit():
             steps.append(fold.name)
 
     steps.sort(key=float)
 
-    # 1. Kreiramo dummy fajl koji PyVista zahteva
     foam_file = foam_dir / "case.foam"
     foam_file.touch()
 
-    # 2. Učitavamo OpenFOAM podatke za poslednji korak (0.5)
     reader = pv.OpenFOAMReader(str(foam_file))
-    
     dfs = []
+    
     for step in steps:
         reader.set_active_time_value(float(step))
         mesh = reader.read()
         fluid = mesh["internalMesh"]
 
-        # 3. Pravimo presek na z=0.05
         slice_z = fluid.slice(normal='z', origin=(0, 0, 0.001))
-        
         centers = slice_z.cell_centers()
 
-        # 4. Pakujemo u Pandas DataFrame
+        u_slice = slice_z['U']
+        p_slice = slice_z['p']
+
         df = pd.DataFrame({
             'time' : [float(step)] * len(centers.points),
             're' : [re] * len(centers.points),
             'x': centers.points[:, 0],
             'y': centers.points[:, 1],
-            'U_x': fluid['U'][:, 0],
-            'U_y': fluid['U'][:, 1],
-            'p': fluid['p']
+            'U_x': u_slice[:, 0],
+            'U_y': u_slice[:, 1],
+            'p': p_slice
         })
         dfs.append(df)
 
-    # 5. Vraćamo generisani DataFrame za zadato re
     print(f"[5/5] Funkcija generate(re = {re}) je uspješno izvršena.\n\n")
-
     return pd.concat(dfs, ignore_index=True).sort_values(by='time')
 
 def generate_train_valid_test(args : dict):
@@ -174,54 +157,74 @@ def generate_train_valid_test(args : dict):
     re_min, re_max = config['range']['min'], config['range']['max']
     n_re_samples = config['range']['n_samples']
     
-    valid_split_index = int(n_re_samples * config['split']['valid'])
-    test_split_index = valid_split_index + int(n_re_samples * config['split']['test'])
+    p_valid = config['split']['valid']
+    p_test = config['split']['test']
+    p_test_relative = p_test / (p_valid + p_test)
 
     re_values = np.linspace(re_min, re_max, n_re_samples)
-    np.random.shuffle(re_values)
+
+    n_bins = max(2, int(n_re_samples * min(p_valid, p_test)))
+    bins = pd.qcut(re_values, q=n_bins, labels=False, duplicates='drop')
+
+    re_train, re_temp, _, bins_temp = train_test_split(
+        re_values, bins,
+        test_size=(p_valid + p_test),
+        stratify=bins,
+        random_state=42
+    )
+
+    re_valid, re_test = train_test_split(
+        re_temp,
+        test_size=p_test_relative,
+        stratify=bins_temp,
+        random_state=42
+    )
 
     train_dfs = []
     valid_dfs = []
     test_dfs = []
 
-    for i, re in enumerate(re_values):
-        if i < valid_split_index:
-            valid_dfs.append(
-                generate(args['train_config'], re)
-            )
-        elif i < test_split_index:
-            test_dfs.append(
-                generate(args['test_config'], re)
-            )
-        else:
-            train_dfs.append(
-                generate(args['train_config'], re)
-            )
+    print(f"--- GENERIŠEM TRENING SKUP ({len(re_train)} uzoraka) ---")
+    for re in re_train:
+        train_dfs.append(generate(args['train_config'], re))
 
-    pd.concat(train_dfs, ignore_index=True).\
-        sort_values(
-            by=['re', 'time', 'y', 'x'], 
-            kind='stable'
-        ).to_csv(output_dir / f"{args['output']}_train.csv", index=False)
+    print(f"--- GENERIŠEM VALIDACIONI SKUP ({len(re_valid)} uzoraka) ---")
+    for re in re_valid:
+        valid_dfs.append(generate(args['train_config'], re))
+
+    print(f"--- GENERIŠEM TESTNI SKUP ({len(re_test)} uzoraka) ---")
+    for re in re_test:
+        test_dfs.append(generate(args['test_config'], re))
+
+    if train_dfs:
+        pd.concat(train_dfs, ignore_index=True).\
+            sort_values(by=['re', 'time', 'y', 'x'], kind='stable').\
+            to_csv(output_dir / f"{args['output']}_train.csv", index=False)
+    else:
+        warnings.warn(f"Skup 'train' je prazan. Preskačem čuvanje train.csv fajla.")
+
+    if valid_dfs:
+        pd.concat(valid_dfs, ignore_index=True).\
+            sort_values(by=['re', 'time', 'y', 'x'], kind='stable').\
+            to_csv(output_dir / f"{args['output']}_valid.csv", index=False)
+    else:
+        warnings.warn(f"Skup 'valid' je prazan. Preskačem čuvanje valid.csv fajla.")
     
-    pd.concat(valid_dfs, ignore_index=True).\
-        sort_values(
-            by=['re', 'time', 'y', 'x'], 
-            kind='stable'
-        ).to_csv(output_dir / f"{args['output']}_valid.csv", index=False)
-    
-    pd.concat(test_dfs, ignore_index=True).\
-        sort_values(
-            by=['re', 'time', 'y', 'x'], 
-            kind='stable'
-        ).to_csv(output_dir / f"{args['output']}_test.csv", index=False)
+    if test_dfs:
+        pd.concat(test_dfs, ignore_index=True).\
+            sort_values(by=['re', 'time', 'y', 'x'], kind='stable').\
+            to_csv(output_dir / f"{args['output']}_test.csv", index=False)
+    else:
+        warnings.warn(f"Skup 'test' je prazan. Preskačem čuvanje test.csv fajla.")
 
 if __name__ == "__main__":
     args = parse_args()
     generate_train_valid_test(args)
 
 
-# python generate_dataset.py -tr train.yaml -te test.yaml -re reynolds.yaml -o full_data
+# python generate_dataset.py -tr train.yaml -te test.yaml -re reynolds.yaml -o full_data_v2
+
+# python generate_dataset.py -tr train.yaml -te test.yaml -re extrapol_reynolds.yaml -o extrapol_data
 
 # if __name__ == "__main__":
 #     df = generate("animation.yaml", 1100)

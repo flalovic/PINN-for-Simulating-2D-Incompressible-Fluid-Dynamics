@@ -55,8 +55,11 @@ def train_model(
         train_loss = 0.0
         train_data_loss = 0.0
         train_physics_loss = 0.0
+        train_samples = 0
 
         for input, target in tqdm(train_dataloader):
+            batch_size = input.shape[0]
+
             input = input.to(device)
             input.requires_grad_(True)
             target = target.to(device)
@@ -75,21 +78,25 @@ def train_model(
             loss.backward()
             optimizer.step()
 
-            train_loss += loss.item()
-            train_data_loss += data_loss.item()
-            train_physics_loss += phys_loss.item()
+            train_loss += loss.item() * batch_size
+            train_data_loss += data_loss.item() * batch_size
+            train_physics_loss += phys_loss.item() * batch_size
+            train_samples += batch_size
 
-        train_loss /= len(train_dataloader)
-        train_data_loss /= len(train_dataloader)
-        train_physics_loss /= len(train_dataloader)
+        train_loss /= train_samples
+        train_data_loss /= train_samples
+        train_physics_loss /= train_samples
 
         model.eval()
 
         valid_loss = 0.0
         valid_data_loss = 0.0
         valid_physics_loss = 0.0
+        valid_samples = 0
 
         for input, target in valid_dataloader:
+            batch_size = input.shape[0]
+            
             input = input.to(device)
             input.requires_grad_(True)
             target = target.to(device)
@@ -103,13 +110,14 @@ def train_model(
             else:
                 loss = data_loss
 
-            valid_loss += loss.item()
-            valid_data_loss += data_loss.item()
-            valid_physics_loss += phys_loss.item()
+            valid_loss += loss.item() * batch_size
+            valid_data_loss += data_loss.item() * batch_size
+            valid_physics_loss += phys_loss.item() * batch_size
+            valid_samples += batch_size
 
-        valid_loss /= len(valid_dataloader)
-        valid_data_loss /= len(valid_dataloader)
-        valid_physics_loss /= len(valid_dataloader)
+        valid_loss /= valid_samples
+        valid_data_loss /= valid_samples
+        valid_physics_loss /= valid_samples
 
         train_losses.append(train_loss)
         valid_losses.append(valid_loss)
