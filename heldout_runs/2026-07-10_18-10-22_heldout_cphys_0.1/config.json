@@ -1,0 +1,19 @@
+{
+    "experiment": "heldout_region",
+    "physics_weight": 0.1,
+    "epochs": 300,
+    "batch_size": 256,
+    "learning_rate": 0.001,
+    "collocation_points": 4096,
+    "seed": 42,
+    "box": {
+        "x_min": 0.15,
+        "x_max": 0.85,
+        "y_min": 0.15,
+        "y_max": 0.85
+    },
+    "train_samples": 1250,
+    "valid_samples": 473,
+    "test_inside_samples": 712800,
+    "test_outside_samples": 728992
+}
