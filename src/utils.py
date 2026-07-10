@@ -173,7 +173,7 @@ def get_domain_ranges(df, input_col_names, overrides=None):
     return ranges
 
 
-def sample_collocation(n, input_col_names, ranges, mean, std, device, generator=None):
+def sample_collocation(n, input_col_names, ranges, mean, std, device, re_values=None, generator=None):
     """
     Uzorkuje `n` KOLOKACIONIH tačaka (bez labela) uniformno po domenu i vraća ih
     NORMALIZOVANE (Z-score, kao i ulaz modela), sa requires_grad=True za autograd.
@@ -187,8 +187,19 @@ def sample_collocation(n, input_col_names, ranges, mean, std, device, generator=
     s = torch.tensor([float(std[c]) for c in input_col_names], dtype=torch.float32)
 
     unit = torch.rand(n, len(input_col_names), generator=generator)
-    phys = lows + unit * (highs - lows)             # uniformno u fizičkom prostoru
-    norm = (phys - m) / s                           # ista normalizacija kao ulaz
+    phys = lows + unit * (highs - lows)            
+
+    # Ne zelimo da mreza uci na Re vrijedostima koje nisu u TRAIN skupu
+    if re_values is not None:
+        re_idx = input_col_names.index("re")
+
+        re_values = torch.tensor(re_values, dtype=torch.float32)
+
+        indices = torch.randint(len(re_values), (n,), generator=generator)
+
+        phys[:, re_idx] = re_values[indices]
+
+    norm = (phys - m) / s                           
 
     return norm.to(device).requires_grad_(True)
 

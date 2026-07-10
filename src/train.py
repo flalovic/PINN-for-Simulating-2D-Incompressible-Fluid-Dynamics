@@ -185,6 +185,8 @@ def train_collocation(
     mean,
     std,
     n_collocation=4096,
+    train_re_values = None,
+    valid_re_values = None
 ):
     """
     PINN trening sa KOLOKACIJOM: data loss se računa na labeliranim tačkama, a fizički
@@ -221,7 +223,8 @@ def train_collocation(
             data_loss = criterion.mse(pred, target)
 
             # fizika na kolokacionim (neobilježenim) tačkama
-            coll = sample_collocation(n_collocation, input_col_names, ranges, mean, std, device)
+            coll = sample_collocation(n_collocation, input_col_names, ranges, mean, std, 
+                                      device, re_values=train_re_values)
             phys_loss = criterion.physics_loss(coll, model(coll))
 
             loss = data_loss + c_phys * phys_loss
@@ -250,7 +253,8 @@ def train_collocation(
                 va_samples += input.shape[0]
         valid_data = va_data / va_samples
 
-        coll = sample_collocation(n_collocation, input_col_names, ranges, mean, std, device)
+        coll = sample_collocation(n_collocation, input_col_names, ranges, mean, std, 
+                                  device, re_values=valid_re_values)
         valid_phys = criterion.physics_loss(coll, model(coll)).item()
         valid_total = valid_data + c_phys * valid_phys
 
