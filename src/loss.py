@@ -11,27 +11,27 @@ class NavierStokesLoss(torch.nn.Module):
         self.mse = nn.MSELoss()
 
     def forward(self, input, pred, target):
-        re = input[:, 1] * self.std['re'] + self.mean['re']
-
-        u = pred[:, 0] * self.std['U_x']
-        v = pred[:, 1] * self.std['U_y']
-        p = pred[:, 2] * self.std['p']
-
-        u_x, u_y, u_xx, u_yy, v_x, v_y, v_xx, v_yy, p_x, p_y = self.calc_grads(input, u, v, p)
-
-        # data loss
         data_loss = self.mse(pred, target)
-
-        # physics loss
-        f_c = u_x + v_y
-        f_u = u * u_x + v * u_y + p_x - 1 / re * (u_xx + u_yy)
-        f_v = u * v_x + v * v_y + p_y - 1 / re * (v_xx + v_yy)
-
-        physics_loss = torch.mean(f_c ** 2) + torch.mean(f_u ** 2) + torch.mean(f_v ** 2)
+        physics_loss = self.physics_loss(input, pred)
 
         loss = data_loss + self.c_physics * physics_loss
 
         return loss, data_loss, physics_loss
+
+    def physics_loss(self, input, pred):
+        re = input[:, 1] * self.std['re'] + self.mean['re']
+
+        u = pred[:, 0] * self.std['U_x'] + self.mean['U_x']
+        v = pred[:, 1] * self.std['U_y'] + self.mean['U_y']
+        p = pred[:, 2] * self.std['p'] + self.mean['p']
+
+        u_t, u_x, u_y, u_xx, u_yy, v_t, v_x, v_y, v_xx, v_yy, p_x, p_y = self.calc_grads(input, u, v, p)
+
+        f_c = u_x + v_y
+        f_u = u_t + u * u_x + v * u_y + p_x - 1 / re * (u_xx + u_yy)
+        f_v = v_t + u * v_x + v * v_y + p_y - 1 / re * (v_xx + v_yy)
+
+        return torch.mean(f_c ** 2) + torch.mean(f_u ** 2) + torch.mean(f_v ** 2)
 
     def calc_grads(self, input, u, v, p):
         u_grad = torch.autograd.grad(
@@ -55,9 +55,11 @@ class NavierStokesLoss(torch.nn.Module):
             create_graph=True
         )[0]
 
+        u_t = u_grad[:, 0] / self.std['time']
         u_x = u_grad[:, 2] / self.std['x']
         u_y = u_grad[:, 3] / self.std['y']
 
+        v_t = v_grad[:, 0] / self.std['time']
         v_x = v_grad[:, 2] / self.std['x']
         v_y = v_grad[:, 3] / self.std['y']
 
@@ -92,4 +94,4 @@ class NavierStokesLoss(torch.nn.Module):
             create_graph=True
         )[0][:, 3] / self.std['y']
 
-        return u_x, u_y, u_xx, u_yy, v_x, v_y, v_xx, v_yy, p_x, p_y
+        return u_t, u_x, u_y, u_xx, u_yy, v_t, v_x, v_y, v_xx, v_yy, p_x, p_y
