@@ -1,9 +1,12 @@
 import numpy as np
 import pandas as pd
+
 from matplotlib import pyplot as plt
 from pathlib import Path
 from datetime import datetime
+
 import torch
+import torch.nn as nn
 
 
 def regions_overlap(r1: dict, r2: dict) -> bool:
@@ -18,6 +21,43 @@ def check_regions(regions: list[dict]) -> bool:
                 return False
     return True
 
+def knn_indices(query: torch.Tensor, source: torch.Tensor, k: int) -> torch.Tensor:
+    """
+    Za svaku query tacku vraca indekse k najblizih source tacaka.
+    query: (Q, 2), source: (S, 2) -> idx: (Q, k).
+    Selekcija (topk) je nediferencijabilna po dizajnu; gradijent tece kroz
+    naknadno racunanje relativnih pozicija i gather-ovanih feature-a.
+
+    NB: koristi torch.cdist (O(Q*S) memorije). Za velike point-cloud-ove po stanju
+    razmotri torch_cluster.radius/knn.
+    """
+    with torch.no_grad():
+        dist = torch.cdist(query, source)          # (Q, S)
+        k = min(k, source.shape[0])
+        idx = torch.topk(dist, k, dim=1, largest=False).indices  # (Q, k)
+    return idx
+
+
+def make_uniform_grid(node_pos: torch.Tensor, size: int) -> torch.Tensor:
+    """
+    Gradi uniformni size x size grid koji pokriva bounding box datih tacaka.
+    Vraca (size*size, 2). Konstantan tenzor (bez gradijenta ka ulazu).
+    """
+    mins = node_pos.min(dim=0).values
+    maxs = node_pos.max(dim=0).values
+    xs = torch.linspace(mins[0].item(), maxs[0].item(), size, device=node_pos.device)
+    ys = torch.linspace(mins[1].item(), maxs[1].item(), size, device=node_pos.device)
+    gy, gx = torch.meshgrid(ys, xs, indexing="ij")
+    return torch.stack([gx.reshape(-1), gy.reshape(-1)], dim=1)  # (size*size, 2)
+
+
+def mlp(dims, act=nn.GELU, last_act=False):
+    layers = []
+    for i in range(len(dims) - 1):
+        layers.append(nn.Linear(dims[i], dims[i + 1]))
+        if i < len(dims) - 2 or last_act:
+            layers.append(act())
+    return nn.Sequential(*layers)
 
 def normalize_data(df: pd.DataFrame, mean, std) -> pd.DataFrame:
     """

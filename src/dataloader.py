@@ -1,5 +1,5 @@
 import torch
-from torch.utils.data import TensorDataset, DataLoader
+from torch.utils.data import TensorDataset, DataLoader, Dataset
 
 import os
 import numpy as np
@@ -107,6 +107,47 @@ def gen_dataloaders(train_df, valid_df, test_df, input_col_names, target_col_nam
     test_dataloader = DataLoader(test_dataset, batch_size=batch_size, num_workers=4)
 
     return train_dataloader, valid_dataloader, test_dataloader
+
+class StateDataset(Dataset):
+    """
+    Svaka stavka je JEDNO polje / stanje: svi (x, y) uzorci za jedan (re, time) snapshot.
+    Namijenjeno operatorskim modelima (GINO/FNO) gdje se cijelo polje enkodira odjednom.
+    """
+
+    def __init__(self, df, input_col_names, target_col_names, group_cols=('re', 'time')):
+        self.states = []
+        for _, g in df.groupby(list(group_cols), sort=False):
+            x = torch.tensor(g[input_col_names].to_numpy(), dtype=torch.float32)
+            y = torch.tensor(g[target_col_names].to_numpy(), dtype=torch.float32)
+            self.states.append((x, y))
+
+    def __len__(self):
+        return len(self.states)
+
+    def __getitem__(self, idx):
+        return self.states[idx]
+
+
+def _state_collate(batch):
+    # batch_size je uvijek 1 stanje -> vracamo (input, target) tog stanja bez dodatne dimenzije
+    return batch[0]
+
+
+def gen_state_dataloaders(train_df, valid_df, test_df, input_col_names, target_col_names, batch_size=1,
+                          group_cols=('re', 'time')):
+    """
+    Kao gen_dataloaders, ali svaki batch je jedno cijelo (re, time) stanje.
+    Drop-in za train_model: `for input, target in loader` daje (N, 4) i (N, 3) jednog stanja.
+    """
+    train_ds = StateDataset(train_df, input_col_names, target_col_names, group_cols)
+    valid_ds = StateDataset(valid_df, input_col_names, target_col_names, group_cols)
+    test_ds = StateDataset(test_df, input_col_names, target_col_names, group_cols)
+
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, collate_fn=_state_collate)
+    valid_loader = DataLoader(valid_ds, batch_size=batch_size, shuffle=False, collate_fn=_state_collate)
+    test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, collate_fn=_state_collate)
+
+    return train_loader, valid_loader, test_loader
 
 if __name__ == '__main__':
     e = 0.003125 

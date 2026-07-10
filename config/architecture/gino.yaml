@@ -1,0 +1,22 @@
+# GINO (Geometry-Informed Neural Operator) arhitektura za lid-driven cavity.
+# Pipeline: MeshGNN -> GNO enkoder -> FNO jezgro -> GNO dekoder -> MLP glava.
+# Koristi se sa src.models_gino.GINO.from_config i per-state dataloader-om.
+
+model: gino
+
+gino:
+  in_size: 4          # [time, re, x, y]
+  out_size: 3         # [U_x, U_y, p]
+  width: 32           # broj latentnih kanala kroz cijeli pipeline
+  latent_size: 32     # rezolucija uniformnog latentnog grida (latent_size x latent_size)
+  fno_modes: 12       # zadrzani Fourier modovi po osi u spektralnim konvolucijama
+  fno_layers: 4       # broj FNO blokova
+  gno_k: 8            # broj susjeda u GNO enkoderu/dekoderu (kernel-integral)
+  use_gnn: true       # ukljuci MeshGNN prije enkodera
+  gnn_k: 8            # broj susjeda u MeshGNN grafu
+  gnn_layers: 2       # broj message-passing slojeva
+
+training:
+  physics_weight: 0.1     # c_physics za NavierStokesLoss
+  batch_mode: per_state   # jedan (re, time) snapshot po koraku (obavezno za operator)
+  group_cols: [re, time]  # kolone koje definisu jedno stanje
