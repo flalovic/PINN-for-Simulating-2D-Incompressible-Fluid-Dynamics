@@ -217,22 +217,40 @@ def generate_train_valid_test(args : dict):
     else:
         warnings.warn(f"Skup 'test' je prazan. Preskačem čuvanje test.csv fajla.")
 
+
 if __name__ == "__main__":
     args = parse_args()
     generate_train_valid_test(args)
 
 
-# python generate_dataset.py -tr train.yaml -te test.yaml -re reynolds.yaml -o full_data_v2
-
-# python generate_dataset.py -tr train.yaml -te test.yaml -re extrapol_reynolds.yaml -o extrapol_data
-
 # if __name__ == "__main__":
-#     df = generate("animation.yaml", 1100)
+#     df = generate("animation.yaml", 550)
 
 #     df.sort_values(
 #         by=["time", "y", "x"],
-#         kind="stable"
-#     ).to_csv(output_dir / "re1100.csv", index=False)
+#         kind="stable",
+#     ).to_csv(output_dir / "re550_animation.csv", index=False)
+
+#     print("Sačuvan: data/re550_animation.csv")
+
+
+
+# if __name__ == "__main__":
+#     re_values = np.linspace(1200, 2000, 5)
+    
+
+#     print(f"--- POKREĆEM TEST ZA EKSTRAPOLACIJU ({len(re_values)} uzoraka) ---")
+#     test_dfs = [generate("test.yaml", re) for re in re_values]
+    
+#     pd.concat(test_dfs, ignore_index=True).\
+#         sort_values(by=['re', 'time', 'y', 'x'], kind='stable').\
+#         to_csv(output_dir / "extrapolation_test.csv", index=False)
+        
+#     print("Fajl sačuvan u: data/extrapolation_test.csv")
+
+# python generate_dataset.py -tr train.yaml -te test.yaml -re reynolds.yaml -o full_data_v2
+
+# python generate_dataset.py -tr train.yaml -te test.yaml -re extrapol_reynolds.yaml -o extrapol_data
 
 
 
