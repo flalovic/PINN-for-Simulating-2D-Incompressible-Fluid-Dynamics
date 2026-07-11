@@ -43,7 +43,7 @@ The model is a coordinate network that maps flow parameters to flow variables:
 
 **Inputs** &nbsp;→&nbsp; `(t, Re, x, y)` &nbsp;—&nbsp; time, Reynolds number, spatial coordinates
 
-**Outputs** &nbsp;→&nbsp; `(Uₓ, U_y, p)` &nbsp;—&nbsp; horizontal velocity, vertical velocity, pressure
+**Outputs** &nbsp;→&nbsp; `(Uₓ, Uᵧ, p)` &nbsp;—&nbsp; horizontal velocity, vertical velocity, pressure
 
 Training combines two objectives:
 
