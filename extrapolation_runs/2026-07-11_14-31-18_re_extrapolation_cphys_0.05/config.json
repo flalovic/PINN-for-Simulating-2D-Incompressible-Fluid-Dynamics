@@ -1,0 +1,12 @@
+{
+    "experiment": "re_extrapolation",
+    "physics_weight": 0.05,
+    "epochs": 300,
+    "batch_size": 256,
+    "learning_rate": 0.001,
+    "collocation_points": 8192,
+    "seed": 42,
+    "train_samples": 2364,
+    "valid_samples": 473,
+    "test_samples": 901120
+}
