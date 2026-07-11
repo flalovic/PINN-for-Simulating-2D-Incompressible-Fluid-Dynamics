@@ -512,7 +512,7 @@
   \vfill
   \begin{block}{Gubitak na fizici ($\mathcal{L}_{\text{fizika}}$)}
     \begin{itemize}
-      \item Računa se nezavisno, isključivo na \textbf{kolokacionim tačkama} uzorkovanim u letu unutar validacionog koraka.
+      \item Računa se nezavisno, isključivo na \textbf{kolokacionim tačkama} uzorkovanim unutar validacionog koraka.
     \end{itemize}
   \end{block}
   
@@ -651,6 +651,134 @@
 % TREBA JOS JEDNA SLIKA (GIF)
 
 % treba i GORDANOVO
+
+% ================================================================== %
+\section{Ekstrapolacija po Rejnoldsovom broju}
+% ================================================================== %
+
+\begin{frame}{Eksperiment: ekstrapolacija na neviđene režime strujanja}
+  \small
+  Do sada je model \emph{interpolirao} unutar trening opsega. Sada testiramo
+  mnogo teži scenario -- \textbf{ekstrapolaciju} na Rejnoldsove brojeve
+  \emph{izvan} opsega treninga.
+  \vfill
+  \begin{itemize}
+    \item \textbf{Trening:} podaci samo za $\mathrm{Re}\in[100,\ 1000]$
+          (isti umanjeni skup od $1\%$, bez centralnog izreza).
+    \item \textbf{Test:} $\mathrm{Re}\in\{1200,\,1400,\,1600,\,1800,\,2000\}$
+          -- \textbf{potpuno izvan} trening opsega.
+  \end{itemize}
+  \vfill
+  \begin{block}{Pitanje}
+    Da li fizičko ograničenje pomaže modelu da \emph{pogodi} strujanje pri
+    Rejnoldsovim brojevima koje nikada nije vidio -- gdje čist ML nema
+    referentne podatke na koje bi se oslonio?
+  \end{block}
+\end{frame}
+
+\begin{frame}{Trening i testiranje}
+  \scriptsize
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \textbf{Trening} \; (labele samo za $\mathrm{Re}\in[100,1000]$)
+      \begin{itemize}
+        \item Isti \textbf{MLP PINN} ($4\times256$, Tanh) i \textbf{hibridni gubitak}
+              $\mathcal{L}=\mathcal{L}_{\text{data}}+c_{\text{phys}}\mathcal{L}_{\text{fizika}}$.
+        \item \textbf{Data loss:} MSE na labeliranim CFD tačkama -- \emph{cio domen}
+              (ovdje \textbf{nema} centralnog izreza).
+        \item \textbf{Physics loss:} na \textbf{8192 kolokacionih tačaka}
+              uzorkovanih po domenu, pri \emph{trening} Rejnoldsovim brojevima.
+        \item Optimizator \textbf{Adam} ($\text{lr}=10^{-3}$), \textbf{ReduceLROnPlateau},
+              \textbf{300 epoha}, batch $256$, Z-score normalizacija.
+        \item \textbf{Ablacija:} $c_{\text{phys}}\in\{0,\,0.01,\,0.05,\,0.1,\,0.5,\,1\}$,
+              svih 6 modela isti seed.
+        \item Najbolji model biramo po \textbf{validacionom} \emph{data} gubitku
+              (validacija = neviđeni $\mathrm{Re}$ \emph{unutar} opsega).
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \textbf{Test} \; (ekstrapolacija, $\mathrm{Re}=1200\!-\!2000$)
+      \begin{itemize}
+        \item \textbf{Nove OpenFOAM simulacije} za svaki test $\mathrm{Re}$, na
+              \textbf{finijoj mreži $128\times128$} (trening je bio $64\times64$)
+              -- dakle i \emph{druge} prostorne tačke.
+        \item $\sim\!901\,000$ tačaka ukupno; nijedan $\mathrm{Re}$ nije viđen u treningu.
+        \item Metrike ($R^2$, MAE, relativna $L^2$) računamo na
+              \textbf{originalnoj (nenormalizovanoj) skali}, po komponenti i ukupno.
+        \item Poredimo \textbf{najbolji PINN} ($c_{\text{phys}}{=}0.1$) sa
+              modelom sa $c_{\text{phys}}{=}0$ na \emph{istim} test tačkama.
+      \end{itemize}
+      \vfill
+      \begin{block}{Suština}
+        Trening ,,zna'' fiziku samo do $\mathrm{Re}=1000$; na testu tražimo da je
+        \emph{produži} na jače strujanje koje nikada nije vidio.
+      \end{block}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+
+\begin{frame}{Ekstrapolacija -- uticaj težine fizike $c_{\text{phys}}$}
+  \vspace{-0.4cm}
+  \begin{table}
+    \centering
+    \caption{Metrike na cijelom ekstrapolacionom skupu ($\mathrm{Re}=1200\!-\!2000$)}
+    \scriptsize
+    \setlength{\tabcolsep}{10pt}
+    \renewcommand{\arraystretch}{0.95}
+    \begin{tabular}{c cccc cc}
+      \toprule
+      \textbf{$c_{\text{phys}}$} & \textbf{Ukupni $R^2$} & \textbf{$R^2_{u}$} & \textbf{$R^2_{v}$} & \textbf{$R^2_{p}$} & \textbf{MAE} & \textbf{Rel. $L^2$} \\
+      \midrule
+      0.00  & 0.8043 & 0.7921 & 0.8239 & 0.7958 & 0.0199 & 0.4421 \\
+      \addlinespace
+      0.01 & 0.8175 & 0.8042 & 0.8392 & 0.8041 & 0.0187 & 0.4270 \\
+      \addlinespace
+      0.05 & 0.8202 & 0.7944 & 0.8641 & 0.7773 & 0.0180 & 0.4238 \\
+      \addlinespace
+      \textbf{0.10} & \textbf{0.8357} & \textbf{0.8136} & \textbf{0.8743} & \textbf{0.7821} & \textbf{0.0163} & \textbf{0.4051} \\
+      \addlinespace
+      0.50 & 0.8204 & 0.7789 & 0.8910 & 0.7639 & 0.0173 & 0.4236 \\
+      \addlinespace
+      1.00 & 0.8311 & 0.7993 & 0.8860 & 0.7713 & 0.0159 & 0.4108 \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+  \vspace{0.2cm}
+  \centering
+  \footnotesize
+  \textbf{Ključni rezultat:} Uvođenjem fizike ($c_{\text{phys}}=0.10$) ukupni $R^2$
+  raste sa \textbf{0.8043} na \textbf{0.8357} ($+3.9\%$) -- i to na Rejnoldsovim
+  brojevima \emph{izvan} trening opsega.
+\end{frame}
+
+\begin{frame}{Ekstrapolacija -- fizika pomaže sve više što je Re dalji}
+  \vspace{-0.2cm}
+  \begin{table}
+    \centering
+    \caption{$R^2$ po Rejnoldsovom broju: najbolji PINN ($c_{\text{phys}}=0.10$) vs.\ čist ML ($c_{\text{phys}}=0$)}
+    \small
+    \setlength{\tabcolsep}{14pt}
+    \renewcommand{\arraystretch}{1.05}
+    \begin{tabular}{c ccccc}
+      \toprule
+      \textbf{Re} & \textbf{1200} & \textbf{1400} & \textbf{1600} & \textbf{1800} & \textbf{2000} \\
+      \midrule
+      PINN (fizika, $c{=}0.10$) & 0.951 & 0.906 & 0.842 & 0.764 & 0.677 \\
+      Bez fizike ($c{=}0$)      & 0.946 & 0.894 & 0.814 & 0.715 & 0.605 \\
+      \midrule
+      \textbf{Dobit od fizike}  & $+0.005$ & $+0.012$ & $+0.028$ & $+0.049$ & $\mathbf{+0.072}$ \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+  \vfill
+  \begin{block}{Ključni zaključak}
+    Što se više udaljavamo od trening opsega (granica na $\mathrm{Re}=1000$), to je
+    \textbf{doprinos fizike veći} -- od $+0.005$ tik iznad granice do $+0.072$ pri
+    $\mathrm{Re}=2000$. Fizičko ograničenje djeluje kao \textbf{stabilizator} u
+    nepoznatom režimu, gdje čist ML brže gubi tačnost.
+  \end{block}
+\end{frame}
 
 % ================================================================== %
 \section{Druga arhitektura: Neuronski operatori}
