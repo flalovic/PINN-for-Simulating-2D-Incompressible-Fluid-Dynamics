@@ -240,7 +240,7 @@ def animate_flow(df, re_value, output_file="flow_animation.gif", fps=3):
             plt.close(fig)
 
             if (idx + 1) % max(1, len(all_frames) // 5) == 0:
-                print(f"  ✓ {idx+1}/{len(all_frames)} frame-ova generirano")
+                print(f"  ✓ {idx+1}/{len(all_frames)} frame-ova generisano")
 
         images = [Image.open(f) for f in frame_files]
         duration = int(1000 / fps)
@@ -709,7 +709,7 @@ def animate_flow_tmp(ANIM_OUT, BOX, test_df, RE_VALUE, model_phys, model_nophys,
             plt.close(fig)
 
             if (idx + 1) % max(1, len(all_frames) // 5) == 0:
-                print(f"  ✓ {idx+1}/{len(all_frames)} frame-ova generirano")
+                print(f"  ✓ {idx+1}/{len(all_frames)} frame-ova generisano")
 
         images = [Image.open(f) for f in frame_files]
         duration = int(1000 / fps)

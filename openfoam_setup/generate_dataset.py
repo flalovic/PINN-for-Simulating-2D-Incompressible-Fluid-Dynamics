@@ -224,14 +224,13 @@ if __name__ == "__main__":
 
 
 # if __name__ == "__main__":
-#     df = generate("animation.yaml", 550)
+#     re = 1600
+#     df = generate("animation.yaml", re)
 
 #     df.sort_values(
 #         by=["time", "y", "x"],
 #         kind="stable",
-#     ).to_csv(output_dir / "re550_animation.csv", index=False)
-
-#     print("Sačuvan: data/re550_animation.csv")
+#     ).to_csv(output_dir / f"re{re}_animation.csv", index=False)
 
 
 

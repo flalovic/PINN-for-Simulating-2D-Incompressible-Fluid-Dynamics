@@ -12,7 +12,7 @@ beyond the training range). Across every experiment the answer is consistent:
 **the harder the generalization, the more the physics term pays off.**
 
 <p align="center">
-  <img src="assets/anim_re_1100.gif" width="750">
+  <img src="results/heldout_all_components_anim.gif" width="750">
 </p>
 
 ---
