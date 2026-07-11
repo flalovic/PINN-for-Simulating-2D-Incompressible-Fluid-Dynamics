@@ -59,6 +59,25 @@ def mlp(dims, act=nn.GELU, last_act=False):
             layers.append(act())
     return nn.Sequential(*layers)
 
+def predict_field(model, input_col_names, target_col_names, df, mean, std, device):
+    """Kopija df-a sa (U_x, U_y, p) zamijenjenim predikcijama modela (originalna skala)."""
+    out = df.copy()
+
+    im = mean[input_col_names].to_numpy(np.float32)
+    istd = std[input_col_names].to_numpy(np.float32)
+    tm = mean[target_col_names].to_numpy(np.float32)
+    tstd = std[target_col_names].to_numpy(np.float32)
+
+    x = (df[input_col_names].to_numpy(np.float32) - im) / istd
+    xt = torch.tensor(x, dtype=torch.float32, device=device)
+
+    with torch.no_grad():
+        pred = model(xt).cpu().numpy() * tstd + tm
+
+    out[target_col_names] = pred
+    return out
+
+
 def normalize_data(df: pd.DataFrame, mean, std) -> pd.DataFrame:
     """
     Normalizujemo podatke u DF-u koristeci Z-score normalizaciju.

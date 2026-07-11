@@ -2,8 +2,12 @@ import os
 import torch
 import tempfile
 
+
 import numpy as np
 import pandas as pd
+
+import src.utils as utils
+import matplotlib.patches as patches
 
 from PIL import Image
 from matplotlib import pyplot as plt
@@ -570,6 +574,136 @@ def animate_truth_vs_pred(model, df_orig, re_value, mean, std, device, fps=2, ou
         print(f"✓ GIF uspješno kreiran: {output_file}")
 
     return output_file
+
+
+def animate_flow(ANIM_OUT, BOX, test_df, RE_VALUE, model_phys, model_nophys, best_phys, mean, std, device):
+
+    # Animacija polja brzina i pritiska kroz vrijeme za odabrani Re, upoređujući Ground Truth i predikcije oba modela.
+    ANIM_FPS = 15   # vise FPS = glatkija reprodukcija
+    N_SUB = 6       # interpoliranih pod-frejmova izmedju susjednih CFD vremenskih koraka
+
+    # Sva vremena za odabrani Re + predikcije oba modela na cijelom (Re, sva vremena) skupu
+    re_df = test_df[test_df["re"] == RE_VALUE].copy()
+    anim_times = sorted(re_df["time"].unique())
+
+    sources = [
+        ("Ground truth", re_df),
+        (f"PINN (fizika, c={best_phys})", utils.predict_field(model_phys, re_df, mean, std, device)),
+        ("Bez fizike (c=0)", utils.predict_field(model_nophys, re_df, mean, std, device)),
+    ]
+
+    # Zajednicka mreza (konstantna kroz vrijeme)
+    d0 = re_df[re_df["time"] == anim_times[0]]
+    x_unique = np.array(sorted(d0["x"].unique()))
+    y_unique = np.array(sorted(d0["y"].unique()))
+    nx, ny = len(x_unique), len(y_unique)
+    X = d0["x"].values.reshape(ny, nx)
+    Y = d0["y"].values.reshape(ny, nx)
+
+    # Zajednicke skale po komponenti (konzistentne boje kroz panele i frejmove).
+    # Brzina: viridis [0, max]; U_x/U_y/p: RdBu_r simetricno oko nule.
+    speed_max = max(np.sqrt(df["U_x"] ** 2 + df["U_y"] ** 2).max() for _, df in sources)
+    a_ux = max(df["U_x"].abs().max() for _, df in sources)
+    a_uy = max(df["U_y"].abs().max() for _, df in sources)
+    a_p = max(df["p"].abs().max() for _, df in sources)
+
+    components = [
+        ("speed", "Brzina [m/s]", "viridis", 0.0, float(speed_max)),
+        ("U_x", "U_x [m/s]", "RdBu_r", -float(a_ux), float(a_ux)),
+        ("U_y", "U_y [m/s]", "RdBu_r", -float(a_uy), float(a_uy)),
+        ("p", "Pritisak [Pa]", "RdBu_r", -float(a_p), float(a_p)),
+    ]
+
+    # Predracunaj polja (U_x, U_y, p) po vremenskom koraku za svaki izvor
+    fields_by_src = []
+    for _, df in sources:
+        per_t = {}
+        for t in anim_times:
+            d = df[df["time"] == t]
+            per_t[t] = (
+                d["U_x"].values.reshape(ny, nx),
+                d["U_y"].values.reshape(ny, nx),
+                d["p"].values.reshape(ny, nx),
+            )
+        fields_by_src.append(per_t)
+
+
+    def field_at(src_idx, i, alpha):
+        """Linearna interpolacija polja izmedju koraka anim_times[i] i anim_times[i+1]."""
+        ux0, uy0, p0 = fields_by_src[src_idx][anim_times[i]]
+        ux1, uy1, p1 = fields_by_src[src_idx][anim_times[i + 1]]
+        return (
+            (1 - alpha) * ux0 + alpha * ux1,
+            (1 - alpha) * uy0 + alpha * uy1,
+            (1 - alpha) * p0 + alpha * p1,
+        )
+
+
+    # Gusti raspored frejmova: N_SUB interpoliranih koraka izmedju svaka dva CFD trenutka.
+    # Vise frejmova + veci FPS = glatkija animacija (bez skokova izmedju snapshotova).
+    frames = []
+    for i in range(len(anim_times) - 1):
+        t0, t1 = anim_times[i], anim_times[i + 1]
+        for s in range(N_SUB):
+            alpha = s / N_SUB
+            frames.append((t0 + (t1 - t0) * alpha, i, alpha))
+    frames.append((anim_times[-1], len(anim_times) - 2, 1.0))
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        frame_files = []
+
+        print(f"Renderovanje {len(frames)} frejmova ({N_SUB}x interpolacija)...")
+        for k, (t, i, alpha) in enumerate(frames):
+            fig, axes = plt.subplots(len(components), len(sources), figsize=(18, 22))
+
+            for row, (key, label, cmap, vmin, vmax) in enumerate(components):
+                levels = np.linspace(vmin, vmax, 21)
+                cf = None
+
+                for col, (title, _) in enumerate(sources):
+                    ax = axes[row, col]
+                    U_x, U_y, P = field_at(col, i, alpha)
+
+                    if key == "speed":
+                        field = np.sqrt(U_x ** 2 + U_y ** 2)
+                        cf = ax.contourf(X, Y, field, levels=levels, cmap=cmap, extend="max")
+                        ax.streamplot(x_unique, y_unique, U_x, U_y,
+                                    color="white", linewidth=0.7, density=1.2, arrowsize=0.9)
+                    else:
+                        field = {"U_x": U_x, "U_y": U_y, "p": P}[key]
+                        cf = ax.contourf(X, Y, field, levels=levels, cmap=cmap, extend="both")
+
+                    ax.add_patch(patches.Rectangle(
+                        (BOX["x_min"], BOX["y_min"]),
+                        BOX["x_max"] - BOX["x_min"], BOX["y_max"] - BOX["y_min"],
+                        fill=False, edgecolor="red", linewidth=1.5, linestyle="--",
+                    ))
+                    ax.set_aspect("equal")
+                    ax.set_xlim(x_unique.min(), x_unique.max())
+                    ax.set_ylim(y_unique.min(), y_unique.max())
+
+                    if row == 0:
+                        ax.set_title(title)
+                    if row == len(components) - 1:
+                        ax.set_xlabel("x")
+                    if col == 0:
+                        ax.set_ylabel(label)
+
+                fig.colorbar(cf, ax=axes[row, :].tolist(), label=label, fraction=0.02, pad=0.02)
+
+            fig.suptitle(f"Re={RE_VALUE:.1f}, t={t:.2f}s", fontsize=15, y=0.995)
+
+            frame_path = os.path.join(tmp_dir, f"all_{k:04d}.png")
+            fig.savefig(frame_path, dpi=90, bbox_inches="tight")
+            frame_files.append(frame_path)
+            plt.close(fig)
+
+        images = [Image.open(f) for f in frame_files]
+        images[0].save(
+            ANIM_OUT, save_all=True, append_images=images[1:],
+            duration=int(1000 / ANIM_FPS), loop=0,
+        )
+    return ANIM_OUT
 
 
 def evaluate(model, test_df_orig, mean, std, device, output_dir="eval_animations", fps=2):
